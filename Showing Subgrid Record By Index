@@ -1,0 +1,70 @@
+//web api method
+
+function checkContacts(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) return;
+
+    // remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var fetchXml = `
+        <fetch top="5">
+            <entity name="contact">
+                <attribute name="contactid" />
+                <attribute name="fullname" />
+                <attribute name="emailaddress1" />
+                <filter>
+                    <condition attribute="parentcustomerid" operator="eq" value="${accountId}" />
+                </filter>
+            </entity>
+        </fetch>`;
+
+    var encodedFetch = "?fetchXml=" + encodeURIComponent(fetchXml);
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", encodedFetch).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+
+                formContext.ui.setFormNotification(
+                    "No Contacts found for this Account",
+                    "WARNING",
+                    "contactWarning"
+                );
+
+            } else {
+
+                 var message = "Contacts Found:\n";
+
+            result.entities.forEach(function (contact, index) {
+
+                var name = contact.fullname || "N/A";
+                var email = contact.emailaddress1 || "N/A";
+
+                message += (index + 1) + ". " + name + " - " + email + "\n";
+            });
+
+            formContext.ui.setFormNotification(
+                message,
+                "INFO",
+                "contactInfo"
+            );
+        }
+            
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+function getcontactonload(executionContext) {
+console.log("Form Loaded, checking contacts...");
+    checkContacts(executionContext);
+
+}
