@@ -1,0 +1,874 @@
+function getlookupvalue(executionContext) {
+var formContext = executionContext.getFormContext();
+//get value 
+var value = formContext.getAttribute("parentcontactid").getValue();
+if (value != null) {
+    var id = value[0].id;
+    var name = value[0].name;
+    var entityType = value[0].entityType;
+    Xrm.Navigation.openAlertDialog({
+        title: "Lookup Value",
+        text: "ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType
+    });
+    alert("ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType);
+}
+}
+
+function getcotactlookupvalue(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var pcontact = formContext.getAttribute("primarycontactid").getValue();
+    if (pcontact != null) {
+        var id = pcontact[0].id;
+        var name = pcontact[0].name;
+        var entityType = pcontact[0].entityType;
+        Xrm.Navigation.openAlertDialog({
+            title: "Primary Contact",
+            text: "ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType
+        });
+        //alert("ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType);
+    }
+
+}
+function getname(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var accountname = formContext.getAttribute("name").getValue();
+    alert("Name: " + accountname);
+}
+
+function openCustomLink(PrimaryControl) {
+    
+    var formContext = PrimaryControl;
+
+    var url = "https://www.google.com";
+
+    var openUrlOptions = {
+        height: 600,
+        width: 800
+    };
+
+    // 4. Opens the URL in a new window/tab
+    Xrm.Navigation.openUrl(url, openUrlOptions);
+}
+function openlink()
+
+
+function getContactdetails(primaryControl) {
+
+    var formContext = primaryControl;
+
+    // Get current Account Id
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Please save the record first."
+        });
+        return;
+    }
+
+    // Remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var query = "?$select=fullname,emailaddress1&$filter=_parentcustomerid_value eq " + accountId;
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", query).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+                Xrm.Navigation.openAlertDialog({
+                    text: "No related contacts found."
+                });
+                return;
+            }
+
+            var message = "Related Contacts:\n\n";
+
+            result.entities.forEach(function (contact) {
+                message += "Name: " + (contact.fullname || "N/A") +
+                           " | Email: " + (contact.emailaddress1 || "N/A") + "\n";
+            });
+
+            Xrm.Navigation.openAlertDialog({ text: message });
+
+        },
+        function (error) {
+            Xrm.Navigation.openErrorDialog({ message: error.message });
+        }
+    );
+}
+
+function getContact(contactId) {
+
+    Xrm.WebApi.retrieveRecord("contact", contactId, "?$select=fullname,emailaddress1,mobilephone").then(
+        function success(result) {
+            alert("Name: " + result.fullname + "\nEmail: " + result.emailaddress1 + "\nMobile: " + result.mobilephone); 
+           // console.log("Name: " + result.fullname);
+            //console.log("Email: " + result.emailaddress1);
+            usewebapi(null, result.mobilephone);
+        },
+        function (error) {
+            alert("Error: " + error.message);
+            //console.log(error.message);
+        }
+    );
+}
+function  usewebapi(mobilephone) {
+    var formContext = executionContext.getFormContext();
+    //var accountId = formContext.data.entity.getId().replace("{", "").replace("}", "");
+    formContext.getAttribute("telephone1").setValue(mobilephone);
+}
+
+function getContacts() {
+
+    Xrm.WebApi.retrieveMultipleRecords("contact",
+        "?$select=fullname,emailaddress1&$filter=contains(fullname,'John')"
+    ).then(
+        function success(result) {
+            result.entities.forEach(function (contact) {
+                alert("Name: " + contact.fullname + "\nEmail: " + contact.emailaddress1);
+                //console.log(contact.fullname);
+            });
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+function createContact() {
+
+    var data = {
+        firstname: "John",
+        lastname: "Smith",
+        emailaddress1: "john@test.com"
+    };
+
+    Xrm.WebApi.createRecord("test", data).then(
+        function success(result) {
+            alert("Contact created with ID: " + result.id);
+            //console.log("Created with ID: " + result.id);
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+async function reassignQuotes(duplicateId, masterId) {
+
+    var query =
+        "?$select=quoteid,statecode,statuscode" +
+        "&$filter=_customerid_value eq '" + duplicateId + "'";
+
+    var result = await parent.Xrm.WebApi.retrieveMultipleRecords("quote", query);
+
+    for (let quote of result.entities) {
+
+        var quoteId = quote.quoteid;
+        var originalState = quote.statecode;
+        var originalStatus = quote.statuscode;
+
+        if (originalState === 2 || originalState === 3) {
+
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 0,
+                statuscode: 1
+            });
+        }
+
+        await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+            "customerid@odata.bind": "/contacts(" + masterId + ")"
+        });
+
+        //won
+        if (originalState === 2) {
+
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 2,
+                statuscode: originalStatus
+            });
+     
+        } else if (originalState === 3) {
+
+            //closed
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 3,
+                statuscode: originalStatus
+            });
+        }
+    }
+}
+
+function hideSpecificTab(executionContext) {
+    var formContext = executionContext.getFormContext();
+    
+        var shippingmethod = formContext.getAttribute("shippingmethodcode").getValue();
+        var tabObj = formContext.ui.tabs.get("tab_3"); 
+        if (shippingmethod == 2) {
+            tabObj.setVisible(false); // Set visibility to false to hide
+        }     
+        else
+        {   tabObj.setVisible(true); // Set visibility to true to show
+        }  
+}
+
+function hideSectionByName(executionContext) {
+    // Get the formContext
+    var formContext = executionContext.getFormContext();
+
+    // Specify the names of the tab and section
+    var tabName = "tab_3"; // Replace with your tab's unique name
+    var sectionName = "tab_3_section_1"; // Replace with your section's unique name
+
+    // Get the section control
+    var sectionObj = formContext.ui.tabs.get(tabName).sections.get(sectionName);
+
+    // Hide the section
+    if (sectionObj) {
+        sectionObj.setVisible(false);
+    }
+}
+//subgrid
+function refreshSubgrid(executionContext) {
+    var formContext = executionContext.getFormContext();
+    
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid) {
+        subgrid.refresh();
+    }
+}
+
+function toggleSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountType = formContext.getAttribute("new_accounttype").getValue();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (accountType == 100000001) {
+        subgrid.setVisible(true);
+    } else {
+        subgrid.setVisible(false);
+    }
+}
+
+function toggleSubgridBasedOnlookupfield(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var lookupValue = formContext.getAttribute("lookup_field_name").getValue();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (lookupValue) {
+        subgrid.setVisible(true);
+    } else {
+        subgrid.setVisible(false);
+    }
+}
+ function custombuttonfilter(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var filter = `<filter type='and'><condition attribute='emailaddress1' operator='like' value='%@%' /><condition attribute='telephone1' operator='not-null' /></filter>`;
+
+    if (subgrid) {
+        subgrid.setFilter(filter);
+    }
+}
+
+function checkformtype(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var formType = formContext.ui.getFormType();
+
+    if (formType === 1) {
+        alert("Form Type: Create");
+    } else if (formType === 2) {
+        alert("Form Type: Edit");
+    } else if (formType === 3) {
+        alert("Form Type: Read Only");
+    } else {
+        alert("Form Type: Other");
+    }
+}
+
+function getSelectedSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = subgrid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+        var id = entity.getId();
+        var name = entity.getPrimaryAttributeValue();
+
+        console.log("Contact ID: " + id);
+        console.log("Contact Name: " + name);
+
+    });
+}
+
+function getSubgridCount(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var grid = subgrid.getGrid();
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Total Contacts: " + count);
+}
+
+function enableButtonIfSubgridHasRecords(primaryControl) {
+
+    var formContext = primaryControl;
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid && subgrid.getGrid()) {
+
+        var count = subgrid.getGrid().getTotalRecordCount();
+
+        if (count > 0)
+            return true;
+    }
+
+    return false;
+}
+
+function autoRefreshSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    setInterval(function () {
+
+        var subgrid = formContext.getControl("Contacts_Subgrid");
+
+        if (subgrid) {
+            subgrid.refresh();
+        }
+
+    }, 10000);
+}
+
+async function updateWorkflowStatus(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    try {
+
+        Xrm.Utility.showProgressIndicator("Updating workflow status...");
+
+        var recordId = formContext.data.entity.getId().replace("{", "").replace("}", "");
+
+        var data = {
+            "statuscode": 100000001
+        };
+
+        var created = await Xrm.WebApi.updateRecord("account", recordId, data);
+
+        formContext.data.refresh(false);
+
+    } catch (error) {
+
+        console.error(error.message);
+        Xrm.Navigation.openAlertDialog({
+            text: error.message
+        });
+
+    } finally {
+        
+        Xrm.Utility.closeProgressIndicator();
+    }
+}
+function disableAddButton(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid) {
+        subgrid.setDisabled(true);
+    }
+}
+function refreshForm(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    try {
+        formContext.data.refresh();
+    } catch (error) {
+        console.error("Error occurred while refreshing the form:", error);
+    }
+}
+//advanced subgrid
+
+function filterContactsSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var city = formContext.getAttribute("address1_city").getValue();
+
+    var fetchXml =
+        "<fetch>" +
+        "<entity name='contact'>" +
+        "<attribute name='fullname'/>" +
+        "<attribute name='contactid'/>" +
+        "<filter>" +
+        "<condition attribute='address1_city' operator='eq' value='" + city + "' />" +
+        "</filter>" +
+        "</entity>" +
+        "</fetch>";
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    if (grid) {
+        grid.setFilterXml(fetchXml);
+        grid.refresh();
+    }
+}
+
+function openSelectedContact(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = grid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+
+        var id = entity.getId();
+        var name = entity.getEntityName();
+
+        var entityFormOptions = {};
+        entityFormOptions.entityName = name;
+        entityFormOptions.entityId = id;
+
+        Xrm.Navigation.openForm(entityFormOptions);
+
+    });
+}
+
+function checkContactLimit(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var count = grid.getGrid().getTotalRecordCount();
+
+    if (count >= 3) {
+
+        Xrm.Navigation.openAlertDialog({
+            text: "You cannot create more than 3 contacts for this account."
+        });
+
+        return false;
+    }
+
+    return true;
+}
+
+function createTaskFromSubgrid(primaryControl) {
+
+    var formContext = primaryControl;
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = grid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+
+        var contactId = entity.getId();
+
+        var task = {};
+        task.subject = "Follow up with Contact";
+        task["regardingobjectid_contact@odata.bind"] = "/contacts(" + contactId.replace(/[{}]/g, "") + ")";
+
+        Xrm.WebApi.createRecord("task", task).then(
+            function success(result) {
+                console.log("Task Created");
+            },
+            function (error) {
+                console.log(error.message);
+            }
+        );
+    });
+}
+
+function subgridOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    if (grid) {
+
+        grid.addOnLoad(function () {
+
+            console.log("Subgrid Loaded");
+
+            var count = grid.getGrid().getTotalRecordCount();
+
+            console.log("Total Records: " + count);
+
+        });
+    }
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Subgrid_new_2");
+
+    
+
+    var count = grid.getGrid().getTotalRecordCount();
+
+    if (count == 0) {
+
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    }
+    else {
+        formContext.ui.clearFormNotification("Child records exist");
+    }
+}
+
+function formOnLoad(executionContext) {
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Subgrid_new_2");
+
+    if (grid) {
+        grid.addOnLoad(checkSubgridRecords);
+    }
+}
+//working code
+//
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl || !gridControl.getGrid()) {
+        return; // grid not loaded yet
+    }
+
+    var count = gridControl.getGrid().getTotalRecordCount();
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (gridControl) {
+
+        // 🔥 Important: wait for subgrid to load
+        gridControl.addOnLoad(function () {
+            checkSubgridRecords(executionContext);
+        });
+    }
+}
+//web api method
+
+function checkContacts(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) return;
+
+    // remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var fetchXml = `
+        <fetch top="5">
+            <entity name="contact">
+                <attribute name="contactid" />
+                <attribute name="fullname" />
+                <attribute name="emailaddress1" />
+                <filter>
+                    <condition attribute="parentcustomerid" operator="eq" value="${accountId}" />
+                </filter>
+            </entity>
+        </fetch>`;
+
+    var encodedFetch = "?fetchXml=" + encodeURIComponent(fetchXml);
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", encodedFetch).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+
+                formContext.ui.setFormNotification(
+                    "No Contacts found for this Account",
+                    "WARNING",
+                    "contactWarning"
+                );
+
+            } else {
+
+                 var message = "Contacts Found:\n";
+
+            result.entities.forEach(function (contact, index) {
+
+                var name = contact.fullname || "N/A";
+                var email = contact.emailaddress1 || "N/A";
+
+                message += (index + 1) + ". " + name + " - " + email + "\n";
+            });
+
+            formContext.ui.setFormNotification(
+                message,
+                "INFO",
+                "contactInfo"
+            );
+        }
+            
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+function getcontactonload(executionContext) {
+console.log("Form Loaded, checking contacts...");
+    checkContacts(executionContext);
+
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    var grid = gridControl.getGrid();
+
+    if (!grid) return;
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Subgrid Count:", count);
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) {
+        console.log("Subgrid not found ❌");
+        return;
+    }
+
+    console.log("Subgrid found ✅");
+
+    // 🔥 KEY POINT: Only use this
+    gridControl.addOnLoad(function () {
+        console.log("Subgrid Loaded 🔥");
+        checkSubgridRecords(executionContext);
+    });
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    var grid = gridControl.getGrid();
+
+    if (!grid) {
+        console.log("Grid not ready, retrying...");
+        setTimeout(function () {
+            checkSubgridRecords(executionContext);
+        }, 2000); // ✅ small retry
+        return;
+    }
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Subgrid Count:", count);
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    // 🔥 Attach event (will work after refresh)
+    gridControl.addOnLoad(function () {
+        console.log("Subgrid Loaded 🔥");
+        checkSubgridRecords(executionContext);
+    });
+
+    // 🔥 FORCE LOAD (THIS IS KEY)
+    setTimeout(function () {
+        console.log("Forcing subgrid refresh...");
+        gridControl.refresh();
+    }, 1000);
+
+    // 🔥 Initial check
+    checkSubgridRecords(executionContext);
+}
+
+//
+if (result.entities.length === 0) {
+
+    formContext.ui.setFormNotification(
+        "No Contacts found for this Account",
+        "WARNING",
+        "contactWarning"
+    );
+
+} else {
+
+    var contacts = [];
+
+    result.entities.forEach(function (contact) {
+        contacts.push({
+            name: contact.fullname || "N/A",
+            email: contact.emailaddress1 || "N/A"
+        });
+    });
+
+    var data = encodeURIComponent(JSON.stringify(contacts));
+
+    Xrm.Navigation.openWebResource(
+        "rk_contactpopup.html",
+        { data: data },
+        600,
+        400
+    );
+}
+
+function fetchcontacts(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) return;
+
+    // remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var fetchXml = `
+        <fetch top="5">
+            <entity name="contact">
+                <attribute name="contactid" />
+                <attribute name="fullname" />
+                <attribute name="emailaddress1" />
+                <filter>
+                    <condition attribute="parentcustomerid" operator="eq" value="${accountId}" />
+                </filter>
+            </entity>
+        </fetch>`;
+
+    var encodedFetch = "?fetchXml=" + encodeURIComponent(fetchXml);
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", encodedFetch).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+
+    formContext.ui.setFormNotification(
+        "No Contacts found for this Account",
+        "WARNING",
+        "contactWarning"
+    );
+
+} else {
+
+    var contacts = [];
+
+    result.entities.forEach(function (contact) {
+        contacts.push({
+            name: contact.fullname || "N/A",
+            email: contact.emailaddress1 || "N/A"
+        });
+    });
+
+    var data = encodeURIComponent(JSON.stringify(contacts));
+
+   Xrm.Navigation.openWebResource(
+    "rk_contactpopup?data=" + data,
+    null,
+    600,
+    400
+    );
+}           
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+function showcontactpopuponload(executionContext) {
+console.log("Form Loaded, checking contacts...");
+    fetchcontacts(executionContext);
+
+}
