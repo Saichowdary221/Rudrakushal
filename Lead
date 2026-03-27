@@ -1,0 +1,85 @@
+"use strict";
+
+var LeadFormScript = LeadFormScript || {};
+
+// ============================================================
+// 1. ON LOAD
+//    Runs when the Lead form opens.
+//    - Shows notification for Web / Advertisement leads
+//    - Locks selected fields as read-only
+// ============================================================
+LeadFormScript.onLoad = function (executionContext) {
+    var formCtx = executionContext.getFormContext();
+    var formType = formCtx.ui.getFormType(); // 1=Create, 2=Update
+
+    var leadSourceAttr = formCtx.getAttribute("leadsourcecode");
+    var leadSource = leadSourceAttr ? leadSourceAttr.getValue() : null;
+
+    // leadSource: 8 = Web, 1 = Advertisement
+    if (leadSource === 8 || leadSource === 1) {
+        formCtx.ui.setFormNotification(
+            "This lead has been coming from " +
+            (leadSource === 8 ? "Web" : "Advertisement") +
+            " and is read-only.",
+            "WARNING",
+            "lead_locked"
+        );
+
+        [
+            "revenue",
+            "jobtitle",
+            "emailaddress1",
+            "telephone1"
+        ].forEach(function (fieldName) {
+            var ctrl = formCtx.getControl(fieldName);
+            if (ctrl) {
+                ctrl.setDisabled(true);
+            }
+        });
+    } else {
+        formCtx.ui.clearFormNotification("lead_locked");
+    }
+};
+
+// ============================================================
+// 2. ON CHANGE — Lead Rating / Quality (leadqualitycode)
+//    Changes form behaviour based on Hot/Warm/Cold rating.
+// ============================================================
+LeadFormScript.onRatingChange = function (executionContext) {
+    var formCtx = executionContext.getFormContext();
+
+    var ratingAttr = formCtx.getAttribute("leadqualitycode");
+    var industryAttr = formCtx.getAttribute("industrycode");
+
+    if (!ratingAttr || !industryAttr) {
+        return;
+    }
+
+    var rating = ratingAttr.getValue();
+    // 1=Hot, 2=Warm, 3=Cold
+
+    formCtx.ui.clearFormNotification("rating_info");
+
+    if (rating === 1) {
+        industryAttr.setRequiredLevel("required");
+        formCtx.ui.setFormNotification(
+            "Hot lead! Industry is now required. Assign to a senior rep immediately.",
+            "INFO",
+            "rating_info"
+        );
+    } else if (rating === 3) {
+        industryAttr.setRequiredLevel("none");
+        formCtx.ui.setFormNotification(
+            "Cold lead — consider adding to a nurture campaign or disqualifying.",
+            "WARNING",
+            "rating_info"
+        );
+    } else {
+        industryAttr.setRequiredLevel("none");
+        formCtx.ui.setFormNotification(
+            "Warm lead — schedule a follow-up call within 3 business days.",
+            "INFO",
+            "rating_info"
+        );
+    }
+};
