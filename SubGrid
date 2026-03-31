@@ -1,0 +1,252 @@
+/**
+ * ============================================================
+ *  said365crm - Dynamics 365 CRM Subgrid Button JavaScript
+ * ============================================================
+ *  Namespace  : said365crm
+ *  Purpose    : JavaScript web resource for subgrid ribbon/
+ *               command bar button actions in D365 CRM.
+ *
+ *  Functions:
+ *    1. onSubgridButtonClick        – Base handler (logs context)
+ *    2. openNewContactFromAccount   – Pre-fill Contact form from Account subgrid
+ *    3. createTaskFromOpportunity   – Silently create Task via WebApi
+ *    4. approveSelectedRows         – Bulk-update selected subgrid rows
+ *
+ *  Ribbon Workbench / Command Designer Parameters:
+ *    PrimaryControl        → primaryControl
+ *    SelectedControl       → selectedControl
+ *    SelectedEntityTypeName→ selectedEntityTypeName
+ *    FirstSelectedItemId   → firstSelectedItemId
+ * ============================================================
+ */
+
+var said365crm = said365crm || {};
+
+(function (ns) {
+    "use strict";
+
+    // ----------------------------------------------------------------
+    // INTERNAL HELPER: Strip curly braces from a GUID string
+    // ----------------------------------------------------------------
+    function cleanGuid(guid) {
+        if (!guid) return "";
+        return guid.replace(/[{}]/g, "");
+    }
+
+    // ----------------------------------------------------------------
+    // INTERNAL HELPER: Refresh a named subgrid control on the form
+    // ----------------------------------------------------------------
+    function refreshSubgrid(primaryControl, subgridName) {
+        try {
+            var ctrl = primaryControl.getControl(subgridName);
+            if (ctrl) {
+                ctrl.refresh();
+            } else {
+                console.warn("said365crm: Subgrid '" + subgridName + "' not found.");
+            }
+        } catch (e) {
+            console.error("said365crm: Error refreshing subgrid '" + subgridName + "'", e);
+        }
+    }
+
+    // ================================================================
+    // 1. BASE HANDLER — Log context info (useful for debugging)
+    // ================================================================
+    /**
+     * General-purpose subgrid button click handler.
+     * Use this as a starting point or for debugging.
+     *
+     * Ribbon Parameters:
+     *   CRM Param 1: PrimaryControl
+     *   CRM Param 2: SelectedEntityTypeName
+     *   CRM Param 3: FirstSelectedItemId
+     *
+     * @param {object} primaryControl        - Form execution context
+     * @param {string} selectedEntityTypeName - Logical name of the subgrid entity
+     * @param {string} firstSelectedItemId    - GUID of first selected row
+     */
+    ns.onSubgridButtonClick = function (primaryControl, selectedEntityTypeName, firstSelectedItemId) {
+        var parentId = primaryControl.data.entity.getId();
+        var parentEntityName = primaryControl.data.entity.getEntityName();
+
+        console.log("[said365crm] onSubgridButtonClick triggered.");
+        console.log("[said365crm] Parent entity  :", parentEntityName);
+        console.log("[said365crm] Parent GUID    :", parentId);
+        console.log("[said365crm] Subgrid entity :", selectedEntityTypeName);
+        console.log("[said365crm] First row GUID :", firstSelectedItemId);
+
+        Xrm.Navigation.openAlertDialog({
+            text: "Button clicked!\n\nParent: " + parentEntityName + "\nSubgrid: " + selectedEntityTypeName,
+            confirmButtonLabel: "OK"
+        });
+    };
+
+    // ================================================================
+    // 2. SCENARIO 1 — Open a pre-filled Contact form from Account subgrid
+    // ================================================================
+    /**
+     * Opens a new Contact main form with the parent Account pre-populated.
+     * Attach to the [+] button on the Contacts subgrid of the Account form.
+     *
+     * Ribbon Parameters:
+     *   CRM Param 1: PrimaryControl
+     *
+     * @param {object} primaryControl - Form execution context (Account form)
+     */
+    ns.openNewContactFromAccount = function (primaryControl) {
+        var accountId = primaryControl.data.entity.getId();
+        var accountNameAttr = primaryControl.getAttribute("name");
+        var accountName = accountNameAttr ? accountNameAttr.getValue() : "";
+
+        if (!accountId) {
+            Xrm.Navigation.openAlertDialog({
+                text: "Please save the Account record before adding a Contact.",
+                confirmButtonLabel: "OK"
+            });
+            return;
+        }
+
+        var entityFormOptions = {
+            entityName: "contact",
+            formType: 2  // 1 = Quick Create, 2 = Main Form
+        };
+
+        var formParameters = {
+            parentcustomerid: cleanGuid(accountId),
+            parentcustomeridname: accountName,
+            parentcustomeridtype: "account"
+        };
+
+        Xrm.Navigation.openForm(entityFormOptions, formParameters).then(
+            function (result) {
+                console.log("[said365crm] Contact form closed. Saved:", result.savedEntityReference);
+                // Refresh the Contacts subgrid (update logical name if different)
+                refreshSubgrid(primaryControl, "contact_customer_accounts");
+            },
+            function (error) {
+                console.error("[said365crm] openNewContactFromAccount error:", error);
+                Xrm.Navigation.openErrorDialog({ message: error.message });
+            }
+        );
+    };
+
+    // ================================================================
+    // 3. SCENARIO 2 — Silently create a Task from Opportunity subgrid
+    // ================================================================
+    /**
+     * Creates a follow-up Task record silently (no form opened) via WebApi.
+     * Attach to a custom "Add Task" button on the Activities subgrid of the
+     * Opportunity form.
+     *
+     * Ribbon Parameters:
+     *   CRM Param 1: PrimaryControl
+     *
+     * @param {object} primaryControl - Form execution context (Opportunity form)
+     */
+    ns.createTaskFromOpportunity = function (primaryControl) {
+        var opportunityId = primaryControl.data.entity.getId();
+        var opportunityNameAttr = primaryControl.getAttribute("name");
+        var opportunityName = opportunityNameAttr ? opportunityNameAttr.getValue() : "Opportunity";
+
+        if (!opportunityId) {
+            Xrm.Navigation.openAlertDialog({
+                text: "Please save the Opportunity record before creating a Task.",
+                confirmButtonLabel: "OK"
+            });
+            return;
+        }
+
+        // Due date = 3 days from now
+        var dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 3);
+
+        var taskRecord = {
+            "subject": "Follow-up for " + opportunityName,
+            "description": "Auto-created from Opportunity subgrid button (said365crm).",
+            "scheduledend": dueDate,
+            "regardingobjectid_opportunity@odata.bind":
+                "/opportunities(" + cleanGuid(opportunityId) + ")"
+        };
+
+        Xrm.WebApi.createRecord("task", taskRecord).then(
+            function (result) {
+                console.log("[said365crm] Task created. ID:", result.id);
+                Xrm.Navigation.openAlertDialog({
+                    text: "Task created successfully!\n\nDue: " + dueDate.toLocaleDateString(),
+                    confirmButtonLabel: "OK"
+                });
+                // Refresh Activities subgrid (update logical name if different)
+                refreshSubgrid(primaryControl, "ActivityPointers");
+            },
+            function (error) {
+                console.error("[said365crm] createTaskFromOpportunity error:", error);
+                Xrm.Navigation.openErrorDialog({ message: "Failed to create Task: " + error.message });
+            }
+        );
+    };
+
+    // ================================================================
+    // 4. SCENARIO 3 — Bulk approve selected rows in the subgrid
+    // ================================================================
+    /**
+     * Loops through all selected rows in the subgrid and sets their
+     * statuscode to Approved (option set value: 100000001).
+     * Attach to a custom "Approve Selected" button on any order/request
+     * subgrid. Uses Promise.all for parallel updates.
+     *
+     * Ribbon Parameters:
+     *   CRM Param 1: SelectedControl   (pass SelectedControl, not PrimaryControl)
+     *   CRM Param 2: PrimaryControl    (needed for subgrid refresh)
+     *
+     * @param {object} selectedControl  - The subgrid control (SelectedControl)
+     * @param {object} primaryControl   - The parent form context (PrimaryControl)
+     */
+    ns.approveSelectedRows = function (selectedControl, primaryControl) {
+        var selectedRows = selectedControl.getSelectedRows();
+
+        if (!selectedRows || selectedRows.length === 0) {
+            Xrm.Navigation.openAlertDialog({
+                text: "Please select at least one record to approve.",
+                confirmButtonLabel: "OK"
+            });
+            return;
+        }
+
+        // Confirm before bulk update
+        Xrm.Navigation.openConfirmDialog(
+            {
+                title: "Approve Records",
+                text: "You are about to approve " + selectedRows.length + " record(s). Continue?",
+                confirmButtonLabel: "Approve",
+                cancelButtonLabel: "Cancel"
+            }
+        ).then(function (confirmResult) {
+            if (!confirmResult.confirmed) return;
+
+            var updatePromises = selectedRows.map(function (row) {
+                var recordId = cleanGuid(row.data.entity.getId());
+                var entityName = row.data.entity.getEntityName();
+
+                return Xrm.WebApi.updateRecord(entityName, recordId, {
+                    "statuscode": 100000001  // Approved — update value to match your option set
+                });
+            });
+
+            Promise.all(updatePromises).then(
+                function () {
+                    console.log("[said365crm] " + selectedRows.length + " record(s) approved.");
+                    selectedControl.refresh();
+                    Xrm.Navigation.openAlertDialog({
+                        text: selectedRows.length + " record(s) approved successfully.",
+                        confirmButtonLabel: "OK"
+                    });
+                },
+                function (error) {
+                    console.error("[said365crm] approveSelectedRows error:", error);
+                    Xrm.Navigation.openErrorDialog({ message: "Approval failed: " + error.message });
+                }
+            );
+        });
+    };
+
+})(said365crm);
