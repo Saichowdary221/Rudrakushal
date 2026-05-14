@@ -1,0 +1,129 @@
+var CaseVipEscalation = (function () {
+    "use strict";
+
+    var NOTIFICATION_ID = "VIP_CASE_NOTIFICATION";
+
+    function onLoad(executionContext) {
+        var formContext = executionContext.getFormContext();
+
+        checkVipCustomer(formContext);
+
+        var customerAttr = formContext.getAttribute("customerid");
+        if (customerAttr) {
+            customerAttr.addOnChange(function () {
+                checkVipCustomer(formContext);
+            });
+        }
+    }
+
+    function checkVipCustomer(formContext) {
+        try {
+            clearVipUI(formContext);
+
+            var customerAttr = formContext.getAttribute("customerid");
+            
+            if (!customerAttr || !customerAttr.getValue()) {
+                return;
+            }
+
+            var customer = customerAttr.getValue()[0];
+
+            if (!customer || customer.entityType !== "account") {
+                return;
+            }
+
+            var accountId = customer.id.replace(/[{}]/g, "");
+
+            Xrm.WebApi.retrieveRecord(
+                "account",
+                accountId,
+                "?$select=name,rk_vipcustomer"
+            ).then(
+                function success(account) {
+
+                    var isVip = account.rk_vipcustomer;
+
+                    if (isVip === true || isVip === 1) {
+                        applyVipUI(formContext, account.name);
+                    } else {
+                        clearVipUI(formContext);
+                    }
+                },
+                function error(error) {
+                    Xrm.Navigation.openErrorDialog({
+                        message: "Error while checking VIP customer: " + error.message
+                    });
+                }
+            );
+
+        } catch (e) {
+            Xrm.Navigation.openErrorDialog({
+                message: "JavaScript error: " + e.message
+            });
+        }
+    }
+
+    function applyVipUI(formContext, accountName) {
+
+        // Set Priority = High
+        // Default Case Priority values:
+        // High = 1, Normal = 2, Low = 3
+        setFieldValue(formContext, "prioritycode", 1);
+
+        // Show VIP escalation section
+        showHideSection(formContext, "SUMMARY_TAB", "section_EscalationDetails", true);
+
+        // Make Escalation Reason mandatory
+        setRequired(formContext, "rk_escalationreason", "required");
+
+        // Show form notification
+        formContext.ui.setFormNotification(
+            "VIP Customer detected: " + accountName + ". Case priority changed to High and escalation reason is required.",
+            "WARNING",
+            NOTIFICATION_ID
+        );
+    }
+
+    function clearVipUI(formContext) {
+
+        formContext.ui.clearFormNotification(NOTIFICATION_ID);
+
+        // Hide VIP escalation section
+        showHideSection(formContext, "SUMMARY_TAB", "section_EscalationDetails", false);
+
+        // Remove mandatory rule
+        setRequired(formContext, "rk_escalationreason", "none");
+    }
+
+    function setFieldValue(formContext, fieldName, value) {
+        var attr = formContext.getAttribute(fieldName);
+        if (attr) {
+            attr.setValue(value);
+            attr.setSubmitMode("always");
+        }
+    }
+
+    function setRequired(formContext, fieldName, level) {
+        var attr = formContext.getAttribute(fieldName);
+        if (attr) {
+            attr.setRequiredLevel(level);
+        }
+    }
+
+    function showHideSection(formContext, tabName, sectionName, isVisible) {
+        var tab = formContext.ui.tabs.get(tabName);
+
+        if (tab) {
+            var section = tab.sections.get(sectionName);
+
+            if (section) {
+                section.setVisible(isVisible);
+            }
+        }
+    }
+
+    return {
+        onLoad: onLoad
+    };
+
+})();
