@@ -1,0 +1,114 @@
+var RK_OpportunityDuplicateCheck = (function () {
+    "use strict";
+
+    var allowSave = false;
+
+    function onSave(executionContext) {
+        try {
+            var formContext = executionContext.getFormContext();
+            var eventArgs = executionContext.getEventArgs();
+
+            if (allowSave) {
+                allowSave = false;
+                return;
+            }
+
+            var customerAttr = formContext.getAttribute("parentaccountid");
+            var productAttr = formContext.getAttribute("rk_productinterest");
+
+            if (!customerAttr || !productAttr) {
+                return;
+            }
+
+            var customerValue = customerAttr.getValue();
+            var productValue = productAttr.getValue();
+
+            if (!customerValue || productValue === null) {
+                return;
+            }
+
+            eventArgs.preventDefault();
+
+            var customerId = customerValue[0].id.replace(/[{}]/g, "");
+            var currentOpportunityId = formContext.data.entity.getId();
+
+            if (currentOpportunityId) {
+                currentOpportunityId = currentOpportunityId.replace(/[{}]/g, "");
+            }
+
+            checkDuplicateOpportunity(formContext, customerId, productValue, currentOpportunityId);
+
+        } catch (e) {
+            Xrm.Navigation.openErrorDialog({
+                message: "Opportunity duplicate check error: " + e.message
+            });
+        }
+    }
+
+    function checkDuplicateOpportunity(formContext, customerId, productValue, currentOpportunityId) {
+        try {
+            var filter = "";
+
+            filter += "statecode eq 0"; // Active Opportunities only
+            filter += " and _customerid_value eq " + customerId;
+            filter += " and " + "rk_productinterest" + " eq " + productValue;
+
+            // Exclude current record during update
+            if (currentOpportunityId) {
+                filter += " and opportunityid ne " + currentOpportunityId;
+            }
+
+            var query =
+                "?$select=opportunityid,name" +
+                "&$filter=" + filter +
+                "&$top=1";
+
+            Xrm.WebApi.retrieveMultipleRecords("opportunity", query).then(
+                function success(result) {
+
+                    if (result.entities.length > 0) {
+
+                        var existingOpportunity = result.entities[0];
+                        var existingName = existingOpportunity.name || "Existing Opportunity";
+
+                        formContext.ui.setFormNotification(
+                            "Duplicate active Opportunity found for the same Customer and Product Interest: " + existingName,
+                            "ERROR",
+                            "duplicate_opportunity_check"
+                        );
+
+                        Xrm.Navigation.openAlertDialog({
+                            title: "Duplicate Opportunity Found",
+                            text:
+                                "An active Opportunity already exists for this Customer and Product Interest.\n\n" +
+                                "Existing Opportunity: " + existingName + "\n\n" +
+                                "Please continue with the existing Opportunity instead of creating a duplicate."
+                        });
+
+                    } else {
+
+                        formContext.ui.clearFormNotification("duplicate_opportunity_check");
+
+                        allowSave = true;
+                        formContext.data.entity.save();
+                    }
+                },
+                function error(error) {
+                    Xrm.Navigation.openErrorDialog({
+                        message: "Error while checking duplicate Opportunity: " + error.message
+                    });
+                }
+            );
+
+        } catch (e) {
+            Xrm.Navigation.openErrorDialog({
+                message: "checkDuplicateOpportunity error: " + e.message
+            });
+        }
+    }
+
+    return {
+        onSave: onSave
+    };
+
+})();
