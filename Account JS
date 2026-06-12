@@ -1,0 +1,1221 @@
+function getlookupvalue(executionContext) {
+var formContext = executionContext.getFormContext();
+//get value 
+var value = formContext.getAttribute("parentcontactid").getValue();
+if (value != null) {
+    var id = value[0].id;
+    var name = value[0].name;
+    var entityType = value[0].entityType;
+    Xrm.Navigation.openAlertDialog({
+        title: "Lookup Value",
+        text: "ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType
+    });
+    alert("ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType);
+}
+}
+
+function getcotactlookupvalue(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var pcontact = formContext.getAttribute("primarycontactid").getValue();//primarycontactid
+    if (pcontact != null) {
+        var id = pcontact[0].id;
+        var name = pcontact[0].name;
+        var entityType = pcontact[0].entityType;
+       
+        console.log("ID: " + id);
+        console.log("Name: " + name);
+        console.log("Entity Type: " + entityType);  
+        //alert("ID: " + id + "\nName: " + name + "\nEntity Type: " + entityType);
+    }
+
+}
+function getname(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var accountname = formContext.getAttribute("name").getValue(); //single line text
+    console.log("Account Name:", accountname);
+    
+}
+
+function setname(executionContext) {
+
+function openCustomLink(PrimaryControl) {
+    
+    var formContext = PrimaryControl;
+
+    var url = "https://www.google.com";
+
+    var openUrlOptions = {
+        height: 600,
+        width: 800
+    };
+
+    // 4. Opens the URL in a new window/tab
+    Xrm.Navigation.openUrl(url, openUrlOptions);
+}
+function openlink()
+
+
+function getContactdetails(primaryControl) {
+
+    var formContext = primaryControl;
+
+    // Get current Account Id
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Please save the record first."
+        });
+        return;
+    }
+
+    // Remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var query = "?$select=fullname,emailaddress1&$filter=_parentcustomerid_value eq " + accountId;
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", query).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+                Xrm.Navigation.openAlertDialog({
+                    text: "No related contacts found."
+                });
+                return;
+            }
+
+            var message = "Related Contacts:\n\n";
+
+            result.entities.forEach(function (contact) {
+                message += "Name: " + (contact.fullname || "N/A") +
+                           " | Email: " + (contact.emailaddress1 || "N/A") + "\n";
+            });
+
+            Xrm.Navigation.openAlertDialog({ text: message });
+
+        },
+        function (error) {
+            Xrm.Navigation.openErrorDialog({ message: error.message });
+        }
+    );
+}
+
+function getContact(contactId) {
+
+    Xrm.WebApi.retrieveRecord("contact", contactId, "?$select=fullname,emailaddress1,mobilephone").then(
+        function success(result) {
+            alert("Name: " + result.fullname + "\nEmail: " + result.emailaddress1 + "\nMobile: " + result.mobilephone); 
+           // console.log("Name: " + result.fullname);
+            //console.log("Email: " + result.emailaddress1);
+            usewebapi(null, result.mobilephone);
+        },
+        function (error) {
+            alert("Error: " + error.message);
+            //console.log(error.message);
+        }
+    );
+}
+function  usewebapi(mobilephone) {
+    var formContext = executionContext.getFormContext();
+    //var accountId = formContext.data.entity.getId().replace("{", "").replace("}", "");
+    formContext.getAttribute("telephone1").setValue(mobilephone);
+}
+
+function getContacts() {
+
+    Xrm.WebApi.retrieveMultipleRecords("contact",
+        "?$select=fullname,emailaddress1&$filter=contains(fullname,'John')"
+    ).then(
+        function success(result) {
+            result.entities.forEach(function (contact) {
+                alert("Name: " + contact.fullname + "\nEmail: " + contact.emailaddress1);
+                //console.log(contact.fullname);
+            });
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+function createContact() {
+
+    var data = {
+        firstname: "John",
+        lastname: "Smith",
+        emailaddress1: "john@test.com"
+    };
+
+    Xrm.WebApi.createRecord("test", data).then(
+        function success(result) {
+            alert("Contact created with ID: " + result.id);
+            //console.log("Created with ID: " + result.id);
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+async function reassignQuotes(duplicateId, masterId) {
+
+    var query =
+        "?$select=quoteid,statecode,statuscode" +
+        "&$filter=_customerid_value eq '" + duplicateId + "'";
+
+    var result = await parent.Xrm.WebApi.retrieveMultipleRecords("quote", query);
+
+    for (let quote of result.entities) {
+
+        var quoteId = quote.quoteid;
+        var originalState = quote.statecode;
+        var originalStatus = quote.statuscode;
+
+        if (originalState === 2 || originalState === 3) {
+
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 0,
+                statuscode: 1
+            });
+        }
+
+        await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+            "customerid@odata.bind": "/contacts(" + masterId + ")"
+        });
+
+        //won
+        if (originalState === 2) {
+
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 2,
+                statuscode: originalStatus
+            });
+     
+        } else if (originalState === 3) {
+
+            //closed
+            await parent.Xrm.WebApi.updateRecord("quote", quoteId, {
+                statecode: 3,
+                statuscode: originalStatus
+            });
+        }
+    }
+}
+
+function hideSpecificTab(executionContext) {
+    var formContext = executionContext.getFormContext();
+        var tickersymbol = formContext.getAttribute("tickersymbol").getValue();
+        //var tabObj = formContext.ui.tabs.get("tab_3"); 
+        var files = formContext.ui.tabs.get("documents_sharepoint")
+        if (tickersymbol == "MSFT") {
+            files.setVisible(false); // Set visibility to false to hide
+        }     
+        else
+        {   files.setVisible(true); // Set visibility to true to show
+        }  
+}
+
+function hideSectionByName(executionContext) {
+    // Get the formContext
+    var formContext = executionContext.getFormContext();
+
+    // Specify the names of the tab and section
+    var tabName = "tab_3"; // Replace with your tab's unique name
+    var sectionName = "tab_3_section_1"; // Replace with your section's unique name
+
+    // Get the section control
+    var sectionObj = formContext.ui.tabs.get(tabName).sections.get(sectionName);
+
+    // Hide the section
+    if (sectionObj) {
+        sectionObj.setVisible(false);
+    }
+}
+//subgrid
+function refreshSubgrid(executionContext) {
+    var formContext = executionContext.getFormContext();
+    
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid) {
+        subgrid.refresh();
+    }
+}
+
+function toggleSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountType = formContext.getAttribute("new_accounttype").getValue();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (accountType == 100000001) {
+        subgrid.setVisible(true);
+    } else {
+        subgrid.setVisible(false);
+    }
+}
+
+function toggleSubgridBasedOnlookupfield(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var lookupValue = formContext.getAttribute("lookup_field_name").getValue();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (lookupValue) {
+        subgrid.setVisible(true);
+    } else {
+        subgrid.setVisible(false);
+    }
+}
+ function custombuttonfilter(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var filter = `<filter type='and'><condition attribute='emailaddress1' operator='like' value='%@%' /><condition attribute='telephone1' operator='not-null' /></filter>`;
+
+    if (subgrid) {
+        subgrid.setFilter(filter);
+    }
+}
+
+function checkformtype(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var formType = formContext.ui.getFormType();
+
+    if (formType === 1) {
+        alert("Form Type: Create");
+    } else if (formType === 2) {
+        alert("Form Type: Edit");
+    } else if (formType === 3) {
+        alert("Form Type: Read Only");
+    } else {
+        alert("Form Type: Other");
+    }
+}
+
+function getSelectedSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = subgrid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+        var id = entity.getId();
+        var name = entity.getPrimaryAttributeValue();
+
+        console.log("Contact ID: " + id);
+        console.log("Contact Name: " + name);
+
+    });
+}
+
+function getSubgridCount(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    var grid = subgrid.getGrid();
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Total Contacts: " + count);
+}
+
+function enableButtonIfSubgridHasRecords(primaryControl) {
+
+    var formContext = primaryControl;
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid && subgrid.getGrid()) {
+
+        var count = subgrid.getGrid().getTotalRecordCount();
+
+        if (count > 0)
+            return true;
+    }
+
+    return false;
+}
+
+function autoRefreshSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    setInterval(function () {
+
+        var subgrid = formContext.getControl("Contacts_Subgrid");
+
+        if (subgrid) {
+            subgrid.refresh();
+        }
+
+    }, 10000);
+}
+
+async function updateWorkflowStatus(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    try {
+
+        Xrm.Utility.showProgressIndicator("Updating workflow status...");
+
+        var recordId = formContext.data.entity.getId().replace("{", "").replace("}", "");
+
+        var data = {
+            "statuscode": 100000001
+        };
+
+        var created = await Xrm.WebApi.updateRecord("account", recordId, data);
+
+        formContext.data.refresh(false);
+
+    } catch (error) {
+
+        console.error(error.message);
+        Xrm.Navigation.openAlertDialog({
+            text: error.message
+        });
+
+    } finally {
+        
+        Xrm.Utility.closeProgressIndicator();
+    }
+}
+function disableAddButton(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var subgrid = formContext.getControl("Contacts_Subgrid");
+
+    if (subgrid) {
+        subgrid.setDisabled(true);
+    }
+}
+function refreshForm(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    try {
+        formContext.data.refresh();
+    } catch (error) {
+        console.error("Error occurred while refreshing the form:", error);
+    }
+}
+//advanced subgrid
+
+function filterContactsSubgrid(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var city = formContext.getAttribute("address1_city").getValue();
+
+    var fetchXml =
+        "<fetch>" +
+        "<entity name='contact'>" +
+        "<attribute name='fullname'/>" +
+        "<attribute name='contactid'/>" +
+        "<filter>" +
+        "<condition attribute='address1_city' operator='eq' value='" + city + "' />" +
+        "</filter>" +
+        "</entity>" +
+        "</fetch>";
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    if (grid) {
+        grid.setFilterXml(fetchXml);
+        grid.refresh();
+    }
+}
+
+function openSelectedContact(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = grid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+
+        var id = entity.getId();
+        var name = entity.getEntityName();
+
+        var entityFormOptions = {};
+        entityFormOptions.entityName = name;
+        entityFormOptions.entityId = id;
+
+        Xrm.Navigation.openForm(entityFormOptions);
+
+    });
+}
+
+function checkContactLimit(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var count = grid.getGrid().getTotalRecordCount();
+
+    if (count >= 3) {
+
+        Xrm.Navigation.openAlertDialog({
+            text: "You cannot create more than 3 contacts for this account."
+        });
+
+        return false;
+    }
+
+    return true;
+}
+
+function createTaskFromSubgrid(primaryControl) {
+
+    var formContext = primaryControl;
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    var selectedRows = grid.getGrid().getSelectedRows();
+
+    selectedRows.forEach(function (row) {
+
+        var entity = row.getData().getEntity();
+
+        var contactId = entity.getId();
+
+        var task = {};
+        task.subject = "Follow up with Contact";
+        task["regardingobjectid_contact@odata.bind"] = "/contacts(" + contactId.replace(/[{}]/g, "") + ")";
+
+        Xrm.WebApi.createRecord("task", task).then(
+            function success(result) {
+                console.log("Task Created");
+            },
+            function (error) {
+                console.log(error.message);
+            }
+        );
+    });
+}
+
+function subgridOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Contacts_Subgrid");
+
+    if (grid) {
+
+        grid.addOnLoad(function () {
+
+            console.log("Subgrid Loaded");
+
+            var count = grid.getGrid().getTotalRecordCount();
+
+            console.log("Total Records: " + count);
+
+        });
+    }
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Subgrid_new_2");
+
+    
+
+    var count = grid.getGrid().getTotalRecordCount();
+
+    if (count == 0) {
+
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    }
+    else {
+        formContext.ui.clearFormNotification("Child records exist");
+    }
+}
+
+function formOnLoad(executionContext) {
+    var formContext = executionContext.getFormContext();
+
+    var grid = formContext.getControl("Subgrid_new_2");
+
+    if (grid) {
+        grid.addOnLoad(checkSubgridRecords);
+    }
+}
+//working code
+//
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl || !gridControl.getGrid()) {
+        return; // grid not loaded yet
+    }
+
+    var count = gridControl.getGrid().getTotalRecordCount();
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (gridControl) {
+
+        // 🔥 Important: wait for subgrid to load
+        gridControl.addOnLoad(function () {
+            checkSubgridRecords(executionContext);
+        });
+    }
+}
+//web api method
+
+function checkContacts(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) return;
+
+    // remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var fetchXml = `
+        <fetch top="5">
+            <entity name="contact">
+                <attribute name="contactid" />
+                <attribute name="fullname" />
+                <attribute name="emailaddress1" />
+                <filter>
+                    <condition attribute="parentcustomerid" operator="eq" value="${accountId}" />
+                </filter>
+            </entity>
+        </fetch>`;
+
+    var encodedFetch = "?fetchXml=" + encodeURIComponent(fetchXml);
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", encodedFetch).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+
+                formContext.ui.setFormNotification(
+                    "No Contacts found for this Account",
+                    "WARNING",
+                    "contactWarning"
+                );
+
+            } else {
+
+                 var message = "Contacts Found:\n";
+
+            result.entities.forEach(function (contact, index) {
+
+                var name = contact.fullname || "N/A";
+                var email = contact.emailaddress1 || "N/A";
+
+                message += (index + 1) + ". " + name + " - " + email + "\n";
+            });
+
+            formContext.ui.setFormNotification(
+                message,
+                "INFO",
+                "contactInfo"
+            );
+        }
+            
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+function getcontactonload(executionContext) {
+console.log("Form Loaded, checking contacts...");
+    checkContacts(executionContext);
+
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    var grid = gridControl.getGrid();
+
+    if (!grid) return;
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Subgrid Count:", count);
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) {
+        console.log("Subgrid not found ❌");
+        return;
+    }
+
+    console.log("Subgrid found ✅");
+
+    // 🔥 KEY POINT: Only use this
+    gridControl.addOnLoad(function () {
+        console.log("Subgrid Loaded 🔥");
+        checkSubgridRecords(executionContext);
+    });
+}
+
+function checkSubgridRecords(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    var grid = gridControl.getGrid();
+
+    if (!grid) {
+        console.log("Grid not ready, retrying...");
+        setTimeout(function () {
+            checkSubgridRecords(executionContext);
+        }, 2000); // ✅ small retry
+        return;
+    }
+
+    var count = grid.getTotalRecordCount();
+
+    console.log("Subgrid Count:", count);
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contactWarning");
+    }
+}
+
+function formOnLoad(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_new_2");
+
+    if (!gridControl) return;
+
+    // 🔥 Attach event (will work after refresh)
+    gridControl.addOnLoad(function () {
+        console.log("Subgrid Loaded 🔥");
+        checkSubgridRecords(executionContext);
+    });
+
+    // 🔥 FORCE LOAD (THIS IS KEY)
+    setTimeout(function () {
+        console.log("Forcing subgrid refresh...");
+        gridControl.refresh();
+    }, 1000);
+
+    // 🔥 Initial check
+    checkSubgridRecords(executionContext);
+}
+
+//
+if (result.entities.length === 0) {
+
+    formContext.ui.setFormNotification(
+        "No Contacts found for this Account",
+        "WARNING",
+        "contactWarning"
+    );
+
+} else {
+
+    var contacts = [];
+
+    result.entities.forEach(function (contact) {
+        contacts.push({
+            name: contact.fullname || "N/A",
+            email: contact.emailaddress1 || "N/A"
+        });
+    });
+
+    var data = encodeURIComponent(JSON.stringify(contacts));
+
+    Xrm.Navigation.openWebResource(
+        "rk_contactpopup.html",
+        { data: data },
+        600,
+        400
+    );
+}
+
+function fetchcontacts(executionContext) {
+
+    var formContext = executionContext.getFormContext();
+
+    var accountId = formContext.data.entity.getId();
+
+    if (!accountId) return;
+
+    // remove curly braces
+    accountId = accountId.replace("{", "").replace("}", "");
+
+    var fetchXml = `
+        <fetch top="5">
+            <entity name="contact">
+                <attribute name="contactid" />
+                <attribute name="fullname" />
+                <attribute name="emailaddress1" />
+                <filter>
+                    <condition attribute="parentcustomerid" operator="eq" value="${accountId}" />
+                </filter>
+            </entity>
+        </fetch>`;
+
+    var encodedFetch = "?fetchXml=" + encodeURIComponent(fetchXml);
+
+    Xrm.WebApi.retrieveMultipleRecords("contact", encodedFetch).then(
+        function success(result) {
+
+            if (result.entities.length === 0) {
+
+    formContext.ui.setFormNotification(
+        "No Contacts found for this Account",
+        "WARNING",
+        "contactWarning"
+    );
+
+} else {
+
+    var contacts = [];
+
+    result.entities.forEach(function (contact) {
+        contacts.push({
+            name: contact.fullname || "N/A",
+            email: contact.emailaddress1 || "N/A"
+        });
+    });
+
+    var data = encodeURIComponent(JSON.stringify(contacts));
+
+   Xrm.Navigation.openWebResource(
+    "rk_contactpopup?data=" + data,
+    null,
+    600,
+    400
+    );
+}           
+        },
+        function (error) {
+            console.log(error.message);
+        }
+    );
+}
+
+
+function showcontactpopuponload(executionContext) {
+console.log("Form Loaded, checking contacts...");
+    fetchcontacts(executionContext);
+
+}
+//
+function restrictContactAccess(executionContext) {
+var formContext = executionContext.getFormContext();
+
+var restrictedRole = "MDU - Membership MSA";
+var userRoles = Xrm.Utility.getGlobalContext().userSettings.roles;
+
+var hasRestrictedRole = false;
+
+userRoles.forEach(function (role) {
+if (role.name === restrictedRole) {
+hasRestrictedRole = true;
+}
+});
+
+var gender = formContext.getAttribute("gendercode");
+
+if (gender && hasRestrictedRole && gender.getValue() === 2) {
+
+Xrm.Navigation.openAlertDialog({
+text: "You are not authorized to see this record."
+}).then(function () {
+formContext.ui.close();
+});
+}
+}
+
+//both buttons
+
+// =============================================
+// MAIN GRID - Bulk Edit Button
+// =============================================
+function openCustomPageWithSelection(primaryControl) {
+    var selectedRows = primaryControl.getGrid().getSelectedRows();
+    var selectedIds = [];
+
+    selectedRows.forEach(function(row) {
+        var recordId = row.data.entity.getId();
+        selectedIds.push(recordId);
+    });
+
+    if (selectedIds.length === 0) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Please select at least one record."
+        });
+        return;
+    }
+
+    navigateToCustomPage(selectedIds);
+}
+
+// =============================================
+// SUBGRID - Bulk Edit Button
+// =============================================
+function openCustomPageFromSubgrid(primaryControl, selectedIds) {
+    if (!selectedIds || selectedIds.length === 0) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Please select at least one record."
+        });
+        return;
+    }
+
+    // Strip curly braces from subgrid IDs
+    var cleanedIds = selectedIds.map(function(id) {
+        return id.replace(/[{}]/g, "");
+    });
+
+    navigateToCustomPage(cleanedIds);
+}
+
+// =============================================
+// SHARED - Navigation logic
+// =============================================
+function navigateToCustomPage(selectedIds) {
+    var pageInput = {
+        pageType: "custom",
+        name: "new_bulkeditpage",
+        entityName: "mcs_engagement",
+        recordIds: selectedIds
+    };
+
+    var navigationOptions = {
+        target: 2,
+        width: { value: 80, unit: "%" },
+        height: { value: 70, unit: "%" }
+    };
+
+    Xrm.Navigation.navigateTo(pageInput, navigationOptions);
+}
+
+//code 
+function restrictContactAccess(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var restrictedRole = "MDU - Membership MSA";
+
+    // Check if the current user has the restricted role
+    var roles = Xrm.Utility.getGlobalContext().userSettings.roles;
+    var hasRestrictedRole = false;
+    roles.forEach(function (role) {
+        if (role.name === restrictedRole) {
+            hasRestrictedRole = true;
+        }
+    });
+
+    // Only proceed with the API check if the user has the restricted role
+    if (!hasRestrictedRole) return;
+
+    // Get the contact ID from the form
+    var contactId = formContext.data.entity.getId().replace(/[{}]/g, "");
+
+    // Build the API request URL
+    var clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
+    var apiUrl = clientUrl +
+        "/api/data/v9.2/contacts(" + contactId + ")" +
+        "?$expand=mdu_role_contact_contact($select=mdu_roleid,mdu_securitylevel)";
+
+    var req = new XMLHttpRequest();
+    req.open("GET", apiUrl, true);
+    req.setRequestHeader("OData-MaxVersion", "4.0");
+    req.setRequestHeader("OData-Version", "4.0");
+    req.setRequestHeader("Content-Type", "application/json; charset=utf-8");
+    req.setRequestHeader("Accept", "application/json");
+    req.setRequestHeader("Prefer", "odata.include-annotations=*");
+
+    req.onreadystatechange = function () {
+        if (this.readyState === 4) {
+            req.onreadystatechange = null;
+
+            if (this.status === 200) {
+                var result = JSON.parse(this.response);
+                console.log(result);
+
+                var isRestricted = false;
+
+                // Loop through the related mdu_role_contact_contact records
+                for (var j = 0; j < result.mdu_role_contact_contact.length; j++) {
+                    var mdu_roleid = result.mdu_role_contact_contact[j]["mdu_roleid"];
+                    var mdu_securitylevel = result.mdu_role_contact_contact[j]["mdu_securitylevel"];
+                    var mdu_securitylevel_formatted = result.mdu_role_contact_contact[j]["mdu_securitylevel@OData.Community.Display.V1.FormattedValue"];
+
+                    console.log("Role ID: " + mdu_roleid);
+                    console.log("Security Level: " + mdu_securitylevel + " (" + mdu_securitylevel_formatted + ")");
+
+                    // Check if any related role has the restricted security level (100000001)
+                    if (mdu_securitylevel === 100000001) {
+                        isRestricted = true;
+                        break;
+                    }
+                }
+
+                // If restricted, navigate away and show alert
+                if (isRestricted) {
+                    Xrm.Navigation.navigateTo({
+                        pageType: "custom",
+                        name: "mdu_partysearch_af2eb"
+                    });
+
+                    Xrm.Navigation.openAlertDialog({
+                        text: "You are not authorized to see this record."
+                    });
+                }
+
+            } else {
+                console.error("API request failed: " + this.responseText);
+            }
+        }
+    };
+
+    req.send();
+}
+
+//mdu format
+
+MDU_Contact_onLoad = MDU_Contact_onLoad || {};
+
+MDU_Contact_onLoad.restrictContactAccess = function (executionContext) {
+    'use strict';
+    try {
+        var formContext = executionContext.getFormContext();
+
+        var contactId = formContext.data.entity.getId();
+        if (!contactId) {
+            console.log("No contact ID found on form.");
+            return;
+        }
+        contactId = contactId.replace(/[{}]/g, "");
+
+        var restrictedRole = "MDU - Membership MSA";
+        var roles = Xrm.Utility.getGlobalContext().userSettings.roles;
+        var hasRestrictedRole = false;
+
+        roles.forEach(function (role) {
+            if (role.name === restrictedRole) {
+                hasRestrictedRole = true;
+            }
+        });
+
+        if (!hasRestrictedRole) {
+            console.log("User does not have restricted role. Access check skipped.");
+            return;
+        }
+
+        var clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
+        var apiUrl = clientUrl +
+            "/api/data/v9.2/contacts(" + contactId + ")" +
+            "?$expand=mdu_role_contact_contact($select=mdu_roleid,mdu_securitylevel)";
+
+        var req = new XMLHttpRequest();
+        req.open("GET", apiUrl, true);
+        req.setRequestHeader("OData-MaxVersion", "4.0");
+        req.setRequestHeader("OData-Version", "4.0");
+        req.setRequestHeader("Content-Type", "application/json; charset=utf-8");
+        req.setRequestHeader("Accept", "application/json");
+        req.setRequestHeader("Prefer", "odata.include-annotations=*");
+
+        req.onreadystatechange = function () {
+            if (this.readyState === 4) {
+                req.onreadystatechange = null;
+
+                if (this.status === 200) {
+                    var result = JSON.parse(this.response);
+                    console.log(result);
+
+                    var isRestricted = false;
+
+                    for (var j = 0; j < result.mdu_role_contact_contact.length; j++) {
+                        var mdu_roleid = result.mdu_role_contact_contact[j]["mdu_roleid"];
+                        var mdu_securitylevel = result.mdu_role_contact_contact[j]["mdu_securitylevel"];
+                        var mdu_securitylevel_formatted = result.mdu_role_contact_contact[j]["mdu_securitylevel@OData.Community.Display.V1.FormattedValue"];
+
+                        console.log("Role ID: " + mdu_roleid);
+                        console.log("Security Level: " + mdu_securitylevel + " (" + mdu_securitylevel_formatted + ")");
+
+                        // Check if any related role has the restricted security level (100000001)
+                        if (mdu_securitylevel === 100000001) {
+                            isRestricted = true;
+                            break;
+                        }
+                    }
+
+                    if (isRestricted) {
+                        Xrm.Navigation.navigateTo({
+                            pageType: "custom",
+                            name: "mdu_partysearch_af2eb"
+                        });
+
+                        Xrm.Navigation.openAlertDialog({
+                            text: "You are not authorized to see this record."
+                        });
+                    }
+
+                } else {
+                    console.error("API request failed: " + this.responseText);
+                }
+            }
+        };
+
+        req.send();
+
+    }
+    catch (error) {
+        console.log("Error in MDU_Contact_onLoad.restrictContactAccess: " + error);
+    }
+};
+
+
+//
+
+function NavigateCustomPageBulkEditButtonSubGrid(selectedControl, launchContext) {
+    
+    if (!selectedControl || typeof selectedControl.getSelectedRows !== "function") {
+        Xrm.Navigation.openAlertDialog({
+            text: "Bulk Edit: Subgrid context not available.",
+            title: "Error"
+        });
+        console.error("Bulk Edit: selectedControl is not a valid subgrid.");
+        return;
+    }
+
+    var selectedRows = selectedControl.getSelectedRows();
+
+    if (!selectedRows || selectedRows.getLength() === 0) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Please select at least one record to bulk edit.",
+            title: "No Records Selected"
+        });
+        return;
+    }
+
+    var engagementIds = [];
+    selectedRows.forEach(function (row) {
+        try {
+            var id = row.getData().getEntity().getId();
+            if (id) {
+                engagementIds.push(id.replace(/[{}]/g, "").toLowerCase());
+            }
+        } catch (e) {
+            console.warn("Bulk Edit: Failed to get ID from row", e);
+        }
+    });
+
+    if (engagementIds.length === 0) {
+        Xrm.Navigation.openAlertDialog({
+            text: "Could not retrieve IDs from the selected records.",
+            title: "Error"
+        });
+        return;
+    }
+
+    var pageInput = {
+        pageType: "custom",
+        name: "mcs_bulkedit_dcd17",
+        parameters: {
+            SelectedEngagementIds: engagementIds.join(","),
+            LaunchContext: launchContext || "subgrid"
+        }
+    };
+
+    var navigationOptions = {
+        target: 2,
+        width: { value: 90, unit: "%" },
+        height: { value: 80, unit: "%" }
+    };
+
+    Xrm.Navigation.navigateTo(pageInput, navigationOptions)
+        .then(function () {
+            
+            try {
+                selectedControl.refresh();
+            } catch (e) {
+                console.warn("Bulk Edit: Subgrid refresh failed.", e);
+            }
+        })
+        .catch(function (error) {
+            console.error("Bulk Edit navigation failed:", error);
+            Xrm.Navigation.openAlertDialog({
+                text: "Navigation to Bulk Edit page failed: " + (error.message || error),
+                title: "Navigation Error"
+            });
+        });
+}
+
+//
+
