@@ -1,0 +1,41 @@
+function formOnLoad(executionContext) {
+    var formContext = executionContext.getFormContext();
+    
+    setTimeout(function () {
+        var gridControl = formContext.getControl("Subgrid_Contacts");
+
+        if (gridControl) {
+            gridControl.addOnLoad(function () {
+                checkSubgridRecords(executionContext);
+            });
+            checkSubgridRecords(executionContext);
+        }
+    }, 5000); //5seconds delay to ensure the subgrid is loaded
+}
+
+function checkSubgridRecords(executionContext) {
+    var formContext = executionContext.getFormContext();
+    var gridControl = formContext.getControl("Subgrid_Contacts");
+
+    if (!gridControl || !gridControl.getGrid()) {
+        return; 
+    }
+
+    var count = gridControl.getGrid().getTotalRecordCount();
+
+    if (count === -1) {
+        return;
+    }
+
+    if (count === 0) {
+        formContext.ui.setFormNotification(
+            "No Contacts found for this Account",
+            "WARNING",
+            "contactWarning"
+        );
+    } else {
+        formContext.ui.clearFormNotification("contacts found : " + count);
+        //xrm.Navigation.openAlertDialog({ text: "Contacts found : " + count });
+        console.log("Contacts found : " + count);
+    }
+}
