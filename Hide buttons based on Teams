@@ -1,0 +1,196 @@
+var CaseRibbon = window.CaseRibbon || {};
+
+CaseRibbon.ButtonRules = (function () {
+    // Global state cache for user teams to avoid async layout lag
+    let userTeamsCache = null;
+    let isFetchingTeams = false;
+
+    // Constants for Case Types matching CRM OptionSet values
+    const CASE_TYPES = {
+        REQUEST: 100000000,
+        INTERNAL_COMPLAINT: 100000001,
+        SAMA_COMPLAINT: 100000002
+    };
+
+    // Constant for Status Reason matching CRM OptionSet values
+    const STATUS_REASONS = {
+        WAITING: 3
+    };
+
+   
+    function cacheUserTeamsAndRefresh(formContext) {
+        if (userTeamsCache !== null) return; 
+        if (isFetchingTeams) return;        
+        isFetchingTeams = true;
+        const userSettings = Xrm.Utility.getGlobalContext().userSettings;
+        const userId = userSettings.userId.replace("{", "").replace("}", "");
+
+        Xrm.WebApi.retrieveRecord("systemuser", userId, "?$expand=teammembership_association($select=name)").then(
+            function success(result) {
+                if (result.teammembership_association && result.teammembership_association.length > 0) {
+                    userTeamsCache = result.teammembership_association.map(team => team.name);
+                } else {
+                    userTeamsCache = [];
+                }
+                isFetchingTeams = false;
+                formContext.ui.refreshRibbon(false);
+            },
+            function error(err) {
+                console.error("Error retrieving user teams for ribbon rule: ", err);
+                userTeamsCache = [];
+                isFetchingTeams = false;
+            }
+        );
+    }
+
+    /**
+     * Rule for "Close" Button
+     */
+    function isCloseButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+       
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false; // Hide while loading team context
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+        const currentStatus = primaryControl.getAttribute("statuscode").getValue();
+
+        const isBackOfficeGroup = userTeamsCache.some(team => [
+            "AML Team", "Back Office Operations Team", "Cards & Payment Solution Disputes Team",
+            "Cards Production Team", "Customer Care Team", "Fraud Team", "IT Support Team",
+            "Payment Operations Team", "Retail Team", "Sanction Team"
+        ].includes(team));
+        
+        const isComplaintManagement = userTeamsCache.includes("Complaint Management Team");
+        const isCardsDisputeTeam = userTeamsCache.includes("Cards & Payment Solution Disputes Team");
+
+        if (isBackOfficeGroup && caseType === CASE_TYPES.REQUEST) {
+            return true;
+        }
+        
+        if (isComplaintManagement && (caseType === CASE_TYPES.INTERNAL_COMPLAINT || caseType === CASE_TYPES.SAMA_COMPLAINT)) {
+            return true;
+        }
+        
+        if (isCardsDisputeTeam && currentStatus === STATUS_REASONS.WAITING && (caseType === CASE_TYPES.INTERNAL_COMPLAINT || caseType === CASE_TYPES.REQUEST)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Rule for "Reassign" Button
+     */
+    function isReassignButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+        
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false;
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+
+        const isBackOfficeGroup = userTeamsCache.some(team => [
+            "AML Team", "Back Office Operations Team", "Cards & Payment Solution Disputes Team",
+            "Cards Production Team", "Customer Care Team", "Fraud Team", "IT Support Team",
+            "Payment Operations Team", "Retail Team", "Sanction Team"
+        ].includes(team));
+
+        if (isBackOfficeGroup && caseType === CASE_TYPES.REQUEST) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Rule for "Resolve" Button
+     */
+    function isResolveButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+        
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false;
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+
+        const isBackOfficeGroup = userTeamsCache.some(team => [
+            "AML Team", "Back Office Operations Team", "Cards & Payment Solution Disputes Team",
+            "Cards Production Team", "Customer Care Team", "Fraud Team", "IT Support Team",
+            "Payment Operations Team", "Retail Team", "Sanction Team"
+        ].includes(team));
+
+        if (isBackOfficeGroup && (caseType === CASE_TYPES.INTERNAL_COMPLAINT || caseType === CASE_TYPES.SAMA_COMPLAINT)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Rule for "Create / Submit (Open)" Button
+     */
+    function isCreateSubmitButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+        
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false;
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+        const isComplaintManagement = userTeamsCache.includes("Complaint Management Team");
+
+        if (isComplaintManagement && caseType === CASE_TYPES.SAMA_COMPLAINT) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Rule for "In Progress" Button
+     */
+    function isInProgressButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+        
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false;
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+        const isComplaintManagement = userTeamsCache.includes("Complaint Management Team");
+
+        if (isComplaintManagement && [CASE_TYPES.REQUEST, CASE_TYPES.INTERNAL_COMPLAINT, CASE_TYPES.SAMA_COMPLAINT].includes(caseType)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Rule for "Reject" Button
+     */
+    function isRejectButtonEnabled(primaryControl) {
+        if (!primaryControl || typeof primaryControl.getAttribute !== "function") return false;
+        
+        cacheUserTeamsAndRefresh(primaryControl);
+        if (userTeamsCache === null) return false;
+
+        const caseType = primaryControl.getAttribute("casetypecode").getValue();
+        const currentStatus = primaryControl.getAttribute("statuscode").getValue();
+        const isCardsDisputeTeam = userTeamsCache.includes("Cards & Payment Solution Disputes Team");
+
+        if (isCardsDisputeTeam && currentStatus === STATUS_REASONS.WAITING && (caseType === CASE_TYPES.INTERNAL_COMPLAINT || caseType === CASE_TYPES.REQUEST)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    return {
+        IsCloseEnabled: isCloseButtonEnabled,
+        IsReassignEnabled: isReassignButtonEnabled,
+        IsResolveEnabled: isResolveButtonEnabled,
+        IsCreateSubmitEnabled: isCreateSubmitButtonEnabled,
+        IsInProgressEnabled: isInProgressButtonEnabled,
+        IsRejectEnabled: isRejectButtonEnabled
+    };
+})();
