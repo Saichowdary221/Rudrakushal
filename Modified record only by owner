@@ -1,0 +1,93 @@
+var CaseOwnerRestriction = (function () {
+
+    var NOTIFICATION_ID = "OwnerRestriction";
+
+    function onLoad(executionContext) {
+
+        var formContext = executionContext.getFormContext();
+
+        // Skip Create form
+        if (formContext.ui.getFormType() === 1) {
+            return;
+        }
+
+        var owner = formContext.getAttribute("ownerid").getValue();
+
+        if (!owner || owner.length === 0) {
+            return;
+        }
+
+        var ownerId = owner[0].id.replace(/[{}]/g, "").toLowerCase();
+        var currentUserId = Xrm.Utility.getGlobalContext().userSettings.userId.replace(/[{}]/g, "").toLowerCase();
+
+        if (ownerId === currentUserId) {
+
+            formContext.ui.clearFormNotification(NOTIFICATION_ID);
+            return;
+        }
+
+        formContext.ui.setFormNotification(
+            "You are not the owner of this case. You cannot modify this record.",
+            "ERROR",
+            NOTIFICATION_ID
+        );
+
+        disableAllControls(formContext);
+
+        formContext.data.entity.addOnSave(preventSave);
+    }
+
+    function disableAllControls(formContext) {
+
+        formContext.ui.controls.forEach(function (control) {
+
+            if (
+                control &&
+                typeof control.setDisabled === "function"
+            ) {
+
+                var controlType = control.getControlType();
+
+                switch (controlType) {
+
+                    case "iframe":
+                    case "webresource":
+                    case "subgrid":
+                    case "timelinewall":
+                        break;
+
+                    default:
+                        control.setDisabled(true);
+                        break;
+                }
+            }
+        });
+    }
+
+    function preventSave(executionContext) {
+
+        var eventArgs = executionContext.getEventArgs();
+
+        if (!eventArgs) {
+            return;
+        }
+
+        // Prevent Auto Save silently
+        if (eventArgs.getSaveMode() === 70) {
+            eventArgs.preventDefault();
+            return;
+        }
+
+        eventArgs.preventDefault();
+
+        Xrm.Navigation.openAlertDialog({
+            title: "Access Restricted",
+            text: "Only the owner of this case can modify this record."
+        });
+    }
+
+    return {
+        onLoad: onLoad
+    };
+
+})();
