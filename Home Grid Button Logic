@@ -1,0 +1,223 @@
+// Sai Kushal Chowdary — Senior D365 CRM Technical Consultant
+var Kushal = window.Kushal || {};
+
+Kushal.AdmissionGrid = {
+    showSelected: async function (selectedControl) {
+        try {
+            if (!selectedControl ||
+                typeof selectedControl.getGrid !== "function") {
+                throw new Error(
+                    "Configure the button parameter as SelectedControl."
+                );
+            }
+
+            var selectedRows = selectedControl
+                .getGrid()
+                .getSelectedRows();
+
+            if (selectedRows.getLength() === 0) {
+                await Xrm.Navigation.openAlertDialog({
+                    title: "Select records",
+                    text: "Please select at least one admission enquiry."
+                });
+                return;
+            }
+
+            var records = [];
+
+            selectedRows.forEach(function (row, index) {
+                var entity = row.getData().getEntity();
+
+                records.push(
+                    (index + 1) + ". " +
+                    (entity.getPrimaryAttributeValue() || "(Unnamed)") +
+                    "\nID: " + entity.getId().replace(/[{}]/g, "")
+                );
+            });
+
+            await Xrm.Navigation.openAlertDialog(
+                {
+                    title: "Selected Admission Enquiries",
+                    text: "Selected count: " +
+                        selectedRows.getLength() +
+                        "\n\n" + records.join("\n\n"),
+                    confirmButtonLabel: "OK"
+                },
+                { width: 550, height: 400 }
+            );
+        } catch (error) {
+            await Xrm.Navigation.openErrorDialog({
+                message: error.message || String(error)
+            });
+        }
+    }
+};
+
+//
+
+var Kushal = window.Kushal || {};
+
+Kushal.AdmissionGrid = {
+    showSelected: async function (selectedControl) {
+        try {
+            // Replace with your Admission Stage column's logical name.
+            var stageColumn = "kt_admissionstage";
+
+            if (!selectedControl ||
+                typeof selectedControl.getGrid !== "function") {
+                throw new Error(
+                    "Configure the button parameter as SelectedControl."
+                );
+            }
+
+            var selectedRows = selectedControl
+                .getGrid()
+                .getSelectedRows();
+
+            if (selectedRows.getLength() === 0) {
+                await Xrm.Navigation.openAlertDialog({
+                    title: "Select records",
+                    text: "Please select at least one admission enquiry."
+                });
+                return;
+            }
+
+            // Capture selected record details before retrieving data.
+            var selectedRecords = [];
+
+            selectedRows.forEach(function (row) {
+                var entity = row.getData().getEntity();
+
+                selectedRecords.push({
+                    id: entity.getId().replace(/[{}]/g, ""),
+                    name: entity.getPrimaryAttributeValue() || "(Unnamed)",
+                    table: entity.getEntityName()
+                });
+            });
+
+            var messages = [];
+
+            for (var i = 0; i < selectedRecords.length; i++) {
+                var record = selectedRecords[i];
+
+                var result = await Xrm.WebApi.retrieveRecord(
+                    record.table,
+                    record.id,
+                    "?$select=" + stageColumn
+                );
+
+                // Formatted value gives the choice label.
+                var stageText = result[
+                    stageColumn +
+                    "@OData.Community.Display.V1.FormattedValue"
+                ];
+
+                if (!stageText) {
+                    stageText = result[stageColumn] == null
+                        ? "Not set"
+                        : String(result[stageColumn]);
+                }
+
+                messages.push(
+                    (i + 1) + ". " + record.name +
+                    "\nAdmission Stage: " + stageText +
+                    "\nID: " + record.id
+                );
+            }
+
+            await Xrm.Navigation.openAlertDialog(
+                {
+                    title: "Selected Admission Enquiries",
+                    text: "Selected count: " + selectedRecords.length +
+                        "\n\n" + messages.join("\n\n"),
+                    confirmButtonLabel: "OK"
+                },
+                { width: 550, height: 450 }
+            );
+        } catch (error) {
+            await Xrm.Navigation.openErrorDialog({
+                message: error.message || String(error)
+            });
+        }
+    }
+};
+
+///
+var Kushal = window.Kushal || {};
+
+Kushal.AdmissionSubgrid = {
+
+    // Author: Sai Kushal Chowdary
+    // Senior D365 CRM Technical Consultant
+
+    showSelectedEnquiries: function (primaryControl, selectedControl) {
+        try {
+            var formContext = primaryControl;
+            var gridContext = selectedControl;
+
+            if (!gridContext || !gridContext.getGrid()) {
+                Xrm.Navigation.openAlertDialog({
+                    text: "Subgrid is unavailable. Check the SelectedControl parameter."
+                });
+                return;
+            }
+
+            // Read selected Admission Enquiry records.
+            var selectedRows = gridContext.getGrid().getSelectedRows();
+
+            if (selectedRows.getLength() === 0) {
+                Xrm.Navigation.openAlertDialog({
+                    text: "Please select at least one Admission Enquiry."
+                });
+                return;
+            }
+
+            // Parent Student record.
+            var studentId = formContext.data.entity
+                .getId()
+                .replace(/[{}]/g, "");
+
+            var studentRecordName =
+                formContext.data.entity.getPrimaryAttributeValue() || "";
+
+            var message = [
+                "Student record: " + studentRecordName,
+                "Student ID: " + studentId,
+                "Selected enquiries: " + selectedRows.getLength(),
+                ""
+            ];
+
+            selectedRows.forEach(function (row, index) {
+                var enquiry = row.getData().getEntity();
+
+                var enquiryId = enquiry.getId().replace(/[{}]/g, "");
+                var enquiryName = enquiry.getPrimaryAttributeValue() || "";
+                var tableName = enquiry.getEntityName();
+
+                message.push(
+                    (index + 1) + ". " + enquiryName,
+                    "Table: " + tableName,
+                    "Record ID: " + enquiryId,
+                    ""
+                );
+            });
+
+            Xrm.Navigation.openAlertDialog(
+                {
+                    title: "Selected Admission Enquiries",
+                    text: message.join("\n"),
+                    confirmButtonLabel: "OK"
+                },
+                {
+                    width: 600,
+                    height: 450
+                }
+            );
+
+        } catch (error) {
+            Xrm.Navigation.openErrorDialog({
+                message: error.message
+            });
+        }
+    }
+};
