@@ -1,0 +1,190 @@
+// Author: Sai Kushal Chowdary
+// Position: Senior D365 CRM Technical Consultant
+// Web resource: kt_AdmissionFetchXML.js
+
+var KT = window.KT || {};
+
+KT.Admission = (function () {
+    "use strict";
+
+    // HOME GRID BUTTON
+    // Function: KT.Admission.fromGrid
+    // CRM Parameter: SelectedControl
+    async function fromGrid(selectedControl) {
+        if (!selectedControl || !selectedControl.getGrid) {
+            await Xrm.Navigation.openAlertDialog({
+                text: "Configure the button to pass SelectedControl."
+            });
+            return;
+        }
+
+        const selectedRows = selectedControl
+            .getGrid()
+            .getSelectedRows();
+
+        if (selectedRows.getLength() !== 1) {
+            await Xrm.Navigation.openAlertDialog({
+                text: "Please select exactly one admission enquiry."
+            });
+            return;
+        }
+
+        const recordId = selectedRows
+            .get(0)
+            .getData()
+            .getEntity()
+            .getId();
+
+        await fetchAdmissionInfo(recordId);
+    }
+
+    // OPTIONAL FORM BUTTON
+    // Function: KT.Admission.fromForm
+    // CRM Parameter: PrimaryControl
+    async function fromForm(primaryControl) {
+        if (!primaryControl || !primaryControl.data) {
+            await Xrm.Navigation.openAlertDialog({
+                text: "Configure the button to pass PrimaryControl."
+            });
+            return;
+        }
+
+        const recordId = primaryControl.data.entity.getId();
+
+        if (!recordId || primaryControl.data.entity.getIsDirty()) {
+            await Xrm.Navigation.openAlertDialog({
+                text: "Please save the admission enquiry first."
+            });
+            return;
+        }
+
+        await fetchAdmissionInfo(recordId);
+    }
+
+    // FETCHXML: retrieve the selected active admission enquiry.
+    async function fetchAdmissionInfo(recordId) {
+        let record;
+
+        try {
+            const id = String(recordId || "").replace(/[{}]/g, "");
+
+            const guidPattern = new RegExp(
+                "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                "i"
+            );
+
+            if (!guidPattern.test(id)) {
+                throw new Error("Invalid admission enquiry record ID.");
+            }
+
+            const fetchXml = `
+                <fetch version="1.0"
+                       mapping="logical"
+                       top="1">
+                    <entity name="kt_admissionenquiry">
+                        <attribute name="kt_admissionenquiryid" />
+                        <attribute name="kt_newcolumn" />
+                        <attribute name="createdon" />
+                        <attribute name="kt_student" />
+                        <attribute name="kt_course" />
+                        <attribute name="kt_admissionstage" />
+
+                        <filter type="and">
+                            <condition
+                                attribute="statecode"
+                                operator="eq"
+                                value="0" />
+                            <condition
+                                attribute="kt_admissionenquiryid"
+                                operator="eq"
+                                value="${id}" />
+                        </filter>
+                    </entity>
+                </fetch>`;
+
+            Xrm.Utility.showProgressIndicator(
+                "Retrieving admission details..."
+            );
+
+            const result = await Xrm.WebApi.retrieveMultipleRecords(
+                "kt_admissionenquiry",
+                "?fetchXml=" + fetchXml
+            );
+
+            record = result.entities[0];
+
+        } catch (error) {
+            Xrm.Utility.closeProgressIndicator();
+
+            console.error("Admission FetchXML error:", error);
+
+            await Xrm.Navigation.openErrorDialog({
+                message: error.message ||
+                    "Unable to retrieve admission details."
+            });
+            return;
+
+        } finally {
+            Xrm.Utility.closeProgressIndicator();
+        }
+
+        if (!record) {
+            await Xrm.Navigation.openAlertDialog({
+                text: "No accessible active admission enquiry was found."
+            });
+            return;
+        }
+
+        const formatted =
+            "@OData.Community.Display.V1.FormattedValue";
+
+        const enquiryNumber = record.kt_newcolumn ?? "Not set";
+
+        // Lookup display names, with record IDs as a fallback.
+        const student =
+            record["_kt_student_value" + formatted] ??
+            record._kt_student_value ??
+            "Not set";
+
+        const course =
+            record["_kt_course_value" + formatted] ??
+            record._kt_course_value ??
+            "Not set";
+
+        // Choice label, such as New, Counselling or Admitted.
+        const admissionStage =
+            record["kt_admissionstage" + formatted] ??
+            record.kt_admissionstage ??
+            "Not set";
+
+        const createdOn =
+            record["createdon" + formatted] ??
+            record.createdon ??
+            "Not set";
+
+        const message = [
+            "Enquiry Number: " + enquiryNumber,
+            "Student: " + student,
+            "Course: " + course,
+            "Admission Stage: " + admissionStage,
+            "Created On: " + createdOn
+        ].join("\n");
+
+        await Xrm.Navigation.openAlertDialog(
+            {
+                title: "Admission Enquiry Details",
+                text: message,
+                confirmButtonLabel: "OK"
+            },
+            {
+                width: 520,
+                height: 340
+            }
+        );
+    }
+
+    return {
+        fromGrid: fromGrid,
+        fromForm: fromForm
+    };
+})();
